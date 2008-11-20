@@ -1,0 +1,23 @@
+---
+abstract: 'Heuristically determine the indent style'
+author:
+  - 'Adam Kennedy <adamk@cpan.org>, Steffen Mueller <smueller@cpan.org>'
+build_requires:
+  Test::More: 0.80
+distribution_type: module
+generated_by: 'Module::Install version 0.77'
+license: perl
+meta-spec:
+  url: http://module-build.sourceforge.net/META-spec-v1.4.html
+  version: 1.4
+module_name: Text::FindIndent
+name: Text-FindIndent
+no_index:
+  directory:
+    - inc
+    - t
+requires:
+  perl: 5.00503
+resources:
+  license: http://dev.perl.org/licenses/
+version: 0.01
