@@ -45,6 +45,11 @@ METHODS
     "sts"/"softtabstob", "et"/"noet"/"expandtabs"/"noexpandtabs", and
     "ts"/"tabstop".
 
+    Similarly, parsing of "emacs" *Local Variables* is somewhat supported.
+    "parse" use explicit settings to override the heuristics but uses style
+    settings only as a fallback. The following options are recognized:
+    "tab-width", "indent-tabs-mode", "c-basic-offset", and "style".
+
 SUPPORT
     Bugs should be reported via the CPAN bug tracker at
 
