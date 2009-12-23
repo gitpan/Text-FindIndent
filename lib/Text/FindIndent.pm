@@ -73,7 +73,7 @@ use strict;
 
 use vars qw{$VERSION};
 BEGIN {
-  $VERSION = '0.05';
+  $VERSION = '0.06';
 }
 
 sub parse {
@@ -140,9 +140,7 @@ sub parse {
       }
 
     }
-    next if $in_pod;
-
-    next if $rest eq '';
+    next if $in_pod or $rest eq '';
 
     if ($ws eq '') {
       $prev_indent = $ws;
@@ -171,7 +169,6 @@ sub parse {
       $prev_indent = $ws;
       next;
     }
-
 
     # at this point, we're desperate!
     my $prev_spaces = $prev_indent;
@@ -253,10 +250,45 @@ sub _grok_indent_diff {
   }
 }
 
-sub _check_vim_modeline {
-  my $class = shift;
-  my $line = shift;
-  my $settings = shift;
+{
+  # the vim modeline regexes
+  my $VimTag = qr/(?:ex|vi(?:m(?:[<=>]\d+)?)?):/;
+  my $OptionArg = qr/[^\s\\]*(?:\\[\s\\][^\s\\]*)*/;
+  my $VimOption = qr/
+    \w+(?:=)?$OptionArg
+  /xo;
+
+  my $VimModeLineStart = qr/(?:^|\s+)$VimTag/o;
+
+  # while technically, we match against $VimModeLineStart before,
+  # IF there is a vim modeline, we don't need to optimize
+  my $VimModelineTypeOne = qr/
+    $VimModeLineStart
+    \s*
+    ($VimOption
+      (?:
+        (?:\s*:\s*|\s+)
+        $VimOption
+      )*
+    )
+    \s*$
+  /xo;
+  
+  my $VimModelineTypeTwo = qr/
+    $VimModeLineStart
+    \s*
+    set?\s+
+    ($VimOption
+      (?:\s+$VimOption)*
+    )
+    \s*
+    :
+  /xo;
+
+  sub _check_vim_modeline {
+    my $class = shift;
+    my $line = shift;
+    my $settings = shift;
 
 # Quoting the vim docs:
 # There are two forms of modelines.  The first form:
@@ -289,59 +321,34 @@ sub _check_vim_modeline {
 #Example:
 #   /* vim: set ai tw=75: */ ~
 #
- 
-  my $vimtag = qr/(?:vi(?:m(?:[<=>]\d+)?)?|ex):/;
-  my $option_arg = qr/[^\s\\]*(?:\\[\s\\][^\s\\]*)*/;
-  my $option = qr/
-    \w+(?:=)?$option_arg
-  /x;
-  my $modeline_type_one = qr/
-    \s+
-    $vimtag
-    \s*
-    ($option
-      (?:
-        (?:\s*:\s*|\s+)
-        $option
-      )*
-    )
-    \s*$
-  /x;
-  
-  my $modeline_type_two = qr/
-    \s+
-    $vimtag
-    \s*
-    set?\s+
-    ($option
-      (?:\s+$option)*
-    )
-    \s*
-    :
-  /x;
+   
 
+    my @options;
+    if ($line =~ $VimModeLineStart) {
+      if ($line =~ $VimModelineTypeOne) {
+        push @options, split /(?!<\\)[:\s]+/, $1;
+      }
+      elsif ($line =~ $VimModelineTypeTwo) {
+        push @options, split /(?!<\\)\s+/, $1;
+      }
+      else {
+        return;
+      }
+    }
+    else {
+      return;
+    }
 
-  my @options;
-  if ($line =~ $modeline_type_one) {
-    push @options, split /(?!<\\)[:\s]+/, $1;
-  }
-  elsif ($line =~ $modeline_type_two) {
-    push @options, split /(?!<\\)\s+/, $1;
-  }
-  else {
+    return if not @options;
+
+    foreach (@options) {
+      /s(?:ts|ofttabstop)=(\d+)/i and $settings->{softtabstop} = $1, next;
+      /t(?:s|abstop)=(\d+)/i and $settings->{tabstop} = $1, next;
+      /((?:no)?)(?:expandtab|et)/i and $settings->{usetabs} = (defined $1 and $1 =~ /no/i ? 1 : 0), next;
+    }
     return;
   }
-
-  return if not @options;
-
-  foreach (@options) {
-    /s(?:ts|ofttabstop)=(\d+)/i and $settings->{softtabstop} = $1, next;
-    /t(?:s|abstop)=(\d+)/i and $settings->{tabstop} = $1, next;
-    /((?:no)?)(?:expandtab|et)/i and $settings->{usetabs} = (defined $1 and $1 =~ /no/i ? 1 : 0), next;
-  }
-  return;
 }
-
 
 
 
@@ -396,6 +403,10 @@ sub _check_vim_modeline {
   $stylelookup{'whitesmith'} = $stylelookup{kr};
   $stylelookup{'stroustrup'} = $stylelookup{kr};
 
+  my $FirstLineVar = qr/[^\s:]+/;
+  my $FirstLineValue = qr/[^;]+/; # dumb
+  my $FirstLinePair = qr/\s*$FirstLineVar\s*:\s*$FirstLineValue;/o;
+  my $FirstLineRegexp = qr/-\*-\s*mode:\s*[^\s;]+;\s*($FirstLinePair+)\s*-\*-/o;
   
   
   sub _check_emacs_local_variables_first_line {
@@ -410,11 +421,7 @@ sub _check_vim_modeline {
 # ;; -*- mode: Lisp; fill-column: 75; comment-column: 50; -*-
 
 
-    my $var = qr/[^\s:]+/;
-    my $value = qr/[^;]+/; # dumb
-    my $pair = qr/\s*$var\s*:\s*$value;/;
-    my $firstline = qr/-\*-\s*mode:\s*[^\s;]+;\s*($pair+)\s*-\*-/;
-    if ($line =~ $firstline) {
+    if ($line =~ $FirstLineRegexp) {
       my @pairs = split /\s*;\s*/, $1;
       foreach my $pair (@pairs) {
         my ($key, $value) = split /\s*:\s*/, $pair, 2;
