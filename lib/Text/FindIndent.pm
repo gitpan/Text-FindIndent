@@ -73,7 +73,7 @@ use strict;
 
 use vars qw{$VERSION};
 BEGIN {
-  $VERSION = '0.07';
+  $VERSION = '0.08';
 }
 
 use constant MAX_LINES => 500;
@@ -86,6 +86,7 @@ sub parse {
   my $textref = ref($text) ? $text : \$text; # accept references, too
 
   my $skip_pod = $opts{skip_pod};
+  my $first_level_indent_only = $opts{first_level_indent_only}?1:0;
 
   my %modeline_settings;
 
@@ -112,6 +113,8 @@ sub parse {
     return( "s" . $modeline_settings{tabstop} );
   }
 
+  my $next_line_braces_pos_plus_1;
+  my $prev_indent_type = undef;
   while ($$textref =~ /\G([ \t]*)([^\r\n]*)[\r\n]+/cgs) {
     my $ws       = $1;
     my $rest     = $2;
@@ -178,10 +181,35 @@ sub parse {
     # skip single-line comments
     next if $rest =~ /^(?:#|\/\/|\/\*)/; # TODO: parse /* ... */!
 
+    if ($next_line_braces_pos_plus_1) {
+      if ($next_line_braces_pos_plus_1==_length_with_tabs_converted($ws)) {
+        next;
+      }
+      $next_line_braces_pos_plus_1=0;
+    } else {
+      if ($rest=~/=> {$/) { #handle case where hash keys and values are indented by braces pos + 1
+        $next_line_braces_pos_plus_1=_length_with_tabs_converted($ws)+length($rest);
+      }
+    }
+
+    if ($first_level_indent_only and $prev_indent ne '') {
+      next;
+    }
+
+    if ($prev_indent eq $ws) {
+      if ($prev_indent_type) {
+        $indentdiffs{$prev_indent_type}+=0.01;
+        #coefficient is not based on data, so change if you think it should be different
+      }
+      next;
+    }
+
     # prefix-matching higher indentation level
     if ($ws =~ /^\Q$prev_indent\E(.+)$/) {
       my $diff = $1;
-      _grok_indent_diff($diff, \%indentdiffs);
+      my $indent_type=_analyse_indent_diff($diff);
+      $indentdiffs{$indent_type}++;
+      $prev_indent_type=$indent_type;
       $prev_indent = $ws;
       next;
     }
@@ -189,7 +217,10 @@ sub parse {
     # prefix-matching lower indentation level
     if ($prev_indent =~ /^\Q$ws\E(.+)$/) {
       my $diff = $1;
-      _grok_indent_diff($diff, \%indentdiffs);
+      #_grok_indent_diff($diff, \%indentdiffs);
+      my $indent_type=_analyse_indent_diff($diff);
+      $indentdiffs{$indent_type}++;
+      $prev_indent_type=$indent_type;
       $prev_indent = $ws;
       next;
     }
@@ -256,6 +287,15 @@ sub parse {
   return $maxkey;
 }
 
+sub _length_with_tabs_converted {
+    my $str=shift;
+    my $tablen=shift || 8;
+    $str =~ s/( +)$//;
+    my $trailing_spaces = $1;
+    $str =~ s/ +//g; #  assume the spaces are all contained in tabs!
+    return length($str)*$tablen+length($trailing_spaces);
+}
+
 sub _grok_indent_diff {
   my $diff = shift;
   my $indentdiffs = shift;
@@ -274,9 +314,26 @@ sub _grok_indent_diff {
   }
 }
 
+sub _analyse_indent_diff {
+  my $diff = shift;
+
+  if ($diff =~ /^ +$/) {
+    return "s" . length($diff);
+  }
+  elsif ($diff =~ /^\t+$/) {
+    return "t8"; # we can't infer what a tab means. Or rather, we need smarter code to do it
+  }
+  else { # mixed!
+    $diff =~ s/( +)$//;
+    my $trailing_spaces = $1;
+    $diff =~ s/ +//g; #  assume the spaces are all contained in tabs!
+    return "m" . (length($diff)*8+length($trailing_spaces));
+  }
+}
+
 {
   # the vim modeline regexes
-  my $VimTag = qr/(?:ex|vi(?:m(?:[<=>]\d+)?)?):/;
+  my $VimTag = qr/(?:ex|vim?(?:[<=>]\d+)?):/;
   my $OptionArg = qr/[^\s\\]*(?:\\[\s\\][^\s\\]*)*/;
   my $VimOption = qr/
     \w+(?:=)?$OptionArg
@@ -346,18 +403,14 @@ sub _grok_indent_diff {
 #   /* vim: set ai tw=75: */ ~
 #
    
-    my $changed = 0;
     my @options;
-    if ($line =~ $VimModeLineStart) {
-      if ($line =~ $VimModelineTypeOne) {
-        push @options, split /(?!<\\)[:\s]+/, $1;
-      }
-      elsif ($line =~ $VimModelineTypeTwo) {
-        push @options, split /(?!<\\)\s+/, $1;
-      }
-      else {
-        return;
-      }
+    return if $line !~ $VimModeLineStart;
+
+    if ($line =~ $VimModelineTypeOne) {
+      push @options, split /(?!<\\)[:\s]+/, $1;
+    }
+    elsif ($line =~ $VimModelineTypeTwo) {
+      push @options, split /(?!<\\)\s+/, $1;
     }
     else {
       return;
@@ -365,6 +418,7 @@ sub _grok_indent_diff {
 
     return if not @options;
 
+    my $changed = 0;
     foreach (@options) {
       /s(?:ts|ofttabstop)=(\d+)/i and $settings->{softtabstop} = $1, $changed = 1, next;
       /t(?:s|abstop)=(\d+)/i and $settings->{tabstop} = $1, $changed = 1,  next;

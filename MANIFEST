@@ -26,9 +26,13 @@ t/data/spaces3_1.txt
 t/data/spaces3_2.txt
 t/data/spaces3_3.txt
 t/data/spaces4_1.txt
+t/data/spaces4_2.txt
+t/data/spaces4_3.txt
+t/data/spaces4_4.txt
 t/data/spaces5_1.txt
 t/data/spaces6_1.txt
 t/data/tabs8_1.txt
+t/data/tabs8_1_skippod.txt
 t/data/tabs8_2.txt
 t/data/tabs8_3.txt
 t/data/unknown_1.txt
