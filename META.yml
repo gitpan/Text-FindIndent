@@ -1,14 +1,14 @@
 ---
 abstract: 'Heuristically determine the indent style'
 author:
-  - 'Adam Kennedy <adamk@cpan.org>, Steffen Mueller <smueller@cpan.org>'
+  - 'Steffen Mueller <smueller@cpan.org>'
 build_requires:
   ExtUtils::MakeMaker: 6.42
   Test::More: 0.80
 configure_requires:
   ExtUtils::MakeMaker: 6.42
 distribution_type: module
-generated_by: 'Module::Install version 0.91'
+generated_by: 'Module::Install version 1.00'
 license: perl
 meta-spec:
   url: http://module-build.sourceforge.net/META-spec-v1.4.html
@@ -23,4 +23,4 @@ requires:
   perl: 5.00503
 resources:
   license: http://dev.perl.org/licenses/
-version: 0.08
+version: 0.09
